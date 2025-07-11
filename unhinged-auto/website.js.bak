@@ -1,0 +1,389 @@
+function login(){
+  const hamburgerButton = document.querySelector("button");
+  hamburgerButton.click();
+  setTimeout(() => {
+    const logoutButton = document.querySelector("[name='Log Out']");
+    if (logoutButton){
+      logoutButton.click();
+      hamburgerButton.click()
+      setTimeout( () => { 
+        const logInButton = document.querySelector("[name='Log In']");
+        logInButton.click();
+      }, 200);
+    }else{
+      const logInButton = document.querySelector("[name='Log In']");
+      logInButton.click();
+    }
+  }, 200)
+}
+
+const button = document.createElement("button");
+button.textContent = "Login";
+button.addEventListener("click", login);
+button.style.background = 'linear-gradient(90deg,#ff26a7,#ff2759)';
+button.style.boxShadow = '0 4px 4px -2px rgba(0,0,0,.33)';
+button.style.padding = "10px 15px";
+button.style.border = "none";
+button.style.borderRadius = "4px";
+
+document.onkeydown = keydown;
+
+function keydown(evt){
+  if (evt.altKey && evt.shiftKey && evt.keyCode == 78){ //alt shift n 
+    login();
+  }
+}
+
+function textAreaUtilities(){
+  const inputBox = document.querySelector(".input-container");
+  inputBox.addEventListener("input", (event) => {
+    const pressedKey = event.data || event.inputType;
+    if (pressedKey === "*"){
+      event.target.value += "*";
+      const cursorPosition = event.target.value.length - 1;
+      event.target.setSelectionRange(cursorPosition, cursorPosition);
+    }else if (pressedKey === "deleteSoftLineBackward"){
+      event.target.value = "";
+    }
+    if (event.target.value.includes("\\m")){
+      event.target.value = event.target.value.replace("\\m", "Michael:");
+    }
+  });
+}
+
+
+
+//spice of life
+function checkTextContent(){
+  const allLoadedMessages = document.querySelectorAll(".message-bubble-content");
+  let regex = /\*(.*?)\*/g;
+  allLoadedMessages.forEach((element) => {
+    if (regex.test(element.innerHTML)){
+      element.innerHTML = element.innerHTML.replace(regex, '<i style="color:lightgray;">$1</i>');
+    }
+  });
+}
+
+function generateRandomString(length) {
+  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let result = '';
+
+  for (let i = 0; i < length; i++) {
+    const randomIndex = Math.floor(Math.random() * characters.length);
+    result += characters.charAt(randomIndex);
+  }
+
+  return result;
+}
+
+function rotateArray(array, newElement) {
+  // Pop the last element
+  const poppedElement = array.pop();
+
+  // Push the new element to the beginning
+  array.unshift(newElement);
+
+  // Return the popped element (optional)
+  return poppedElement;
+}
+
+
+//check url and reload if needed
+let oldHref = document.location.href;
+window.onload = function() {
+    let bodyList = document.querySelector("body");
+    //listen to onload events in body
+    const observer = new MutationObserver(function(mutations) {
+        if (oldHref != document.location.href) {
+            oldHref = document.location.href;
+            console.info("changed location");
+            if (document.location.href == "https://www.unhinged.ai/"){
+              window.location.reload();
+                //main(); //dont
+            }else if(document.location.href.includes("https://www.unhinged.ai/chat")){
+              window.location.reload();
+            }
+        }
+    });
+
+    let config = {
+        childList: true,
+        subtree: true
+    };
+
+    observer.observe(bodyList, config);
+};
+
+function geturlQueryStringParams(url){
+  const urlSearchParams = new URLSearchParams(url);
+  const params = Object.fromEntries(urlSearchParams.entries());
+  return params;
+}
+
+// XMLHttpRequest interception
+const originalXmlOpen = XMLHttpRequest.prototype.open;
+const originalXmlSend = XMLHttpRequest.prototype.send;
+
+let currentPollingSID = null;
+let currentEIO = null;
+let currentTransportType = null;
+let currentTimestampDefault = null;
+
+XMLHttpRequest.prototype.open = function (method, url, async, user, password) {
+    console.log(`Intercepted XHR request: ${method} ${url}`);
+    if (url.includes("log") || url.includes("updateUser")) {
+        console.info(`Request blocked for URL: ${url}`);
+        return; // Do not proceed with the request
+    }
+    const params = geturlQueryStringParams(url);
+    const value = params["https://api.unhinged.ai:443/socket.io/?EIO"];
+    delete params["https://api.unhinged.ai:443/socket.io/?EIO"];
+    params["EIO"] = value;
+    currentTimestampDefault = params.t;
+    currentTransportType = params.transport;
+    currentPollingSID = params.sid;
+    currentEIO = params.EIO;
+    console.log(currentEIO, currentPollingSID, currentTimestampDefault, currentTransportType);
+    // Call the original method
+    originalXmlOpen.call(this, method, url, async, user, password);
+};
+
+XMLHttpRequest.prototype.send = function (data) {
+    // Intercept the send method
+    console.log('Intercepted XHR send');
+    if (data) {
+        console.log("With Data:", data);
+    }
+    // Call the original method
+    originalXmlSend.call(this, data);
+};
+
+//to add, do array.pop(0), array.push
+function parseMessages(){
+  let messages = document.querySelectorAll(".message-bubble-content");
+  messages = Array.from(messages);
+  messages = messages.slice(messages.length - 19);
+  const mainArray = [];
+  messages.forEach((element) => {
+    element.innerHTML = element.innerHTML.replace(/<i[^>]*>(.*?)<\/i>/g, '*$1*');
+    const parent = element.parentElement;
+    const roleType = parent.className.includes("recipient") ? "assistant" : "user";
+    const elementData = {
+      role: roleType,
+      content: element.innerHTML.replace(/\n/g, " ") ,
+      id: crypto.randomUUID()
+    }
+    mainArray.push(elementData);
+  });
+  return mainArray;
+}
+
+
+function createMessage(message, timestamp, sid, eio, type, transport="polling"){
+  const currentMessages = parseMessages();
+  const newMessage = {role: "user", content: message,id:crypto.randomUUID()}
+  // currentMessages.pop(0);
+  currentMessages.push(newMessage);
+  // console.debug(currentMessages); for debugging
+  const baseUrl = `https://api.unhinged.ai/socket.io/?EIO=${eio}&transport=${transport}&t=${timestamp}&sid=${sid}`;
+  // Create payload
+  const data = {
+    isAnonymous: true,
+    userId: "649a236d481fae4fad64bf08",
+    characterId: __NEXT_DATA__.props.pageProps.conversation.character._id,
+    conversationId: __NEXT_DATA__.props.pageProps.conversation._id,
+    messages: currentMessages, 
+    selectedModel: JSON.parse(localStorage.selectedModel).name
+  };
+  // Convert the JSON payload to a string
+  const jsonData = JSON.stringify(data);
+  //create main str
+  let mainString = `42["subscribe","normal_queue(${data.selectedModel})"]\u001e420["get_completion", ${jsonData}]`
+
+  if (type === "xhr"){
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", baseUrl, true);
+    xhr.setRequestHeader('Content-Type', 'text/plain;charset=UTF-8');
+    xhr.onload = function() {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        // Request was successful, handle the response
+        console.log('Response:', xhr.responseText);
+      } else {
+        // Request failed, handle the error
+        console.error('Request failed with status:', xhr.status);
+      }
+    };
+
+    xhr.onerror = function() {
+      console.error('Request failed');
+    };
+    
+    //send request
+    xhr.send(mainString);
+  }else if(type === "fetch"){
+    fetch(baseUrl, {"headers": {
+      "Content-Type": "text/plain;charset=UTF-8", 
+      "Accept": "*/*",
+    },
+      "method": "POST",
+      "mode": "cors",
+      "body": mainString,
+      "credentials": "omit"
+    })
+    .then((response) => {
+       if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+      return response.text(); // This returns a promise
+    })
+    .then((response) => {
+      console.log(response);
+    })
+    .catch((err) => {
+      console.error(err);
+    })
+  }
+}
+
+function createUserElement(message){
+  // Create the main container div
+  const mainContainer = document.createElement('div');
+  mainContainer.dataset.component = 'MessageBubble';
+  mainContainer.setAttribute('index', '18');
+  mainContainer.style.display = 'flex';
+  mainContainer.style.flexDirection = 'column';
+  mainContainer.style.gap = '4px';
+  mainContainer.style.justifyContent = 'flex-start';
+  mainContainer.style.alignItems = 'flex-start';
+  mainContainer.style.width = '100%';
+  mainContainer.style.opacity = '1.0';
+
+  // Create the first inner div
+  const firstInnerDiv = document.createElement('div');
+  firstInnerDiv.style.display = 'flex';
+  firstInnerDiv.style.flexDirection = 'row-reverse';
+  firstInnerDiv.style.gap = '10px';
+  firstInnerDiv.style.justifyContent = 'flex-start';
+  firstInnerDiv.style.alignItems = 'flex-start';
+  firstInnerDiv.style.width = '100%';
+
+  // Create the second inner div
+  const secondInnerDiv = document.createElement('div');
+  secondInnerDiv.style.display = 'flex';
+  secondInnerDiv.style.flexDirection = 'column';
+  secondInnerDiv.style.gap = '2px';
+  secondInnerDiv.style.justifyContent = 'flex-start';
+  secondInnerDiv.style.alignItems = 'flex-start';
+  secondInnerDiv.style.width = 'fit-content';
+  secondInnerDiv.style.position = 'relative';
+  secondInnerDiv.style.maxWidth = '90%';
+
+  // Create the content container div
+  const contentContainer = document.createElement('div');
+  contentContainer.classList.add('message-bubble-content-container', 'sender', 'clickable');
+  contentContainer.style.display = 'flex';
+  contentContainer.style.flexDirection = 'column';
+  contentContainer.style.gap = '8px';
+  contentContainer.style.justifyContent = 'flex-start';
+  contentContainer.style.alignItems = 'flex-start';
+  contentContainer.style.width = 'fit-content';
+  contentContainer.style.outline = '0px';
+  contentContainer.setAttribute('disabled', '');
+
+  // Create the content div
+  const contentDiv = document.createElement('div');
+  contentDiv.classList.add('message-bubble-content');
+  contentDiv.setAttribute('contenteditable', 'false');
+  contentDiv.innerHTML = message; 
+  // Create the third inner div
+  const thirdInnerDiv = document.createElement('div');
+  thirdInnerDiv.style.display = 'flex';
+  thirdInnerDiv.style.flexDirection = 'row-reverse';
+  thirdInnerDiv.style.gap = '4px';
+  thirdInnerDiv.style.justifyContent = 'flex-start';
+  thirdInnerDiv.style.alignItems = 'center';
+  thirdInnerDiv.style.width = '100%';
+
+  // Create the author div
+  const authorDiv = document.createElement('div');
+  authorDiv.classList.add('message-bubble-author');
+  authorDiv.textContent = 'You';
+
+  // Append elements to their respective parents
+  contentContainer.appendChild(contentDiv);
+  secondInnerDiv.appendChild(contentContainer);
+  secondInnerDiv.appendChild(thirdInnerDiv);
+  thirdInnerDiv.appendChild(authorDiv);
+  firstInnerDiv.appendChild(secondInnerDiv);
+  mainContainer.appendChild(firstInnerDiv);
+  
+  return mainContainer;
+}
+
+
+function replaceSharedConversation(){
+  const mainbar = document.querySelector(".bottom-bar");
+  console.log(mainbar.children);
+  mainbar.removeChild(mainbar.firstChild);
+  const newDiv = document.createElement("div");
+  const newTextArea = document.createElement("textarea");
+  newTextArea.style.color = "#e0e0e0";
+  newTextArea.style.fontFamily = "inherit";
+  newTextArea.style.width = "100%";
+  newTextArea.className = "input-container";
+  newTextArea.style.fontSize = "1em";
+  newTextArea.placeholder = "Send a message..";
+  newDiv.style.height = "42px";
+  newTextArea.style.outline = "none";
+  newTextArea.style.fontWeight = "300";
+  newTextArea.style.height = "42px";
+  newDiv.className = "input-wrapper";
+  newDiv.style.width = "100%";
+  newDiv.appendChild(newTextArea);
+  mainbar.appendChild(newDiv);
+  //functionality
+  newTextArea.addEventListener("keydown", (event) => {
+    if (event.key === "Enter"){
+      event.preventDefault();
+      const generatedTimestamp = currentTimestampDefault.substring(0,5) + generateRandomString(2);
+      const userMessage = event.target.value;
+      createMessage(userMessage, generatedTimestamp, currentPollingSID, currentEIO, "fetch");
+      const mainElement = document.querySelector(".content-container");
+      mainElement.firstChild.insertBefore(createUserElement(userMessage), mainElement.firstChild.lastChild);
+      console.log(event.target.value);
+      event.target.value = "";
+    }
+  });
+}
+
+document.body.onload = function(){
+  let parentElementMain = document.querySelector(".navbar-background");
+  parentElementMain.insertBefore(button,parentElementMain.lastChild);
+
+  if (window.location.href.includes("https://www.unhinged.ai/chat")){
+    checkTextContent();
+    const mutationCallback = (mutationList) => {
+      for (const mutation of mutationList) {
+        if (mutation.type === "childList") {
+          checkTextContent();
+        } 
+      }
+    };
+    let config = {
+            childList: true,
+            subtree: true
+        };
+    const observer = new MutationObserver(mutationCallback);
+    const desiredDiv = document.querySelector(".content-container").firstChild;
+    observer.observe(desiredDiv, config);
+    setTimeout( () => {
+      const bottomBarChild = document.querySelector(".bottom-bar").firstChild;
+      if (bottomBarChild.textContent.includes("This conversation has been shared with you.")){
+        replaceSharedConversation();
+        textAreaUtilities();
+      }else{
+        textAreaUtilities();
+      }
+    }, 500);
+  }
+}

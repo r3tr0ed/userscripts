@@ -1,0 +1,600 @@
+// ==UserScript==
+// @name         Website Loader
+// @namespace    http://tampermonkey.net/
+// @version      2024-04-19
+// @description  try to take over the world!
+// @author       You
+// @match        https://www.unhinged.ai/*
+// @icon         https://www.google.com/s2/favicons?sz=64&domain=unhinged.ai
+// @grant        none
+// ==/UserScript==
+
+
+function login(){
+  const hamburgerButton = document.querySelector("button");
+  hamburgerButton.click();
+  setTimeout(() => {
+    const logoutButton = document.querySelector("[name='Log Out']");
+    if (logoutButton){
+      logoutButton.click();
+      hamburgerButton.click()
+      setTimeout( () => {
+        const logInButton = document.querySelector("[name='Log In']");
+        logInButton.click();
+      }, 200);
+    }else{
+      const logInButton = document.querySelector("[name='Log In']");
+      logInButton.click();
+    }
+  }, 200)
+}
+
+const button = document.createElement("button");
+button.textContent = "Login";
+button.addEventListener("click", login);
+button.style.background = 'linear-gradient(90deg,#ff26a7,#ff2759)';
+button.style.boxShadow = '0 4px 4px -2px rgba(0,0,0,.33)';
+button.style.padding = "10px 15px";
+button.style.border = "none";
+button.style.borderRadius = "4px";
+
+document.onkeydown = keydown;
+
+function keydown(evt){
+  if (evt.altKey && evt.shiftKey && evt.keyCode == 78){ //alt shift n
+    login();
+  }
+}
+
+var editingActive = false;
+function addEditingFeatures(){
+  try{
+    const elements = document.querySelectorAll(".message-bubble-content");
+    elements.forEach((element) => { element.addEventListener("click", (event) => {
+        if (!editingActive){
+          const buttons = createClickableDiv();
+          const selectedElement = element.parentElement.parentElement.parentElement.parentElement;
+          if (element.parentElement.className.includes("recipient")){
+            buttons.style.alignSelf = "flex-start";
+          }else{
+            buttons.style.alignSelf = "flex-end";
+          }
+          savedContent = element.innerHTML;
+          selectedElement.appendChild(buttons);
+          element.parentElement.style.outline = "rgba(255, 38, 168, 0.643) solid 2px";
+          element.setAttribute("contenteditable", "true");
+          editingActive = true;
+        }
+      });
+    });
+  }catch(err){
+    console.error(err);
+  }
+}
+
+var savedContent = null;
+function textAreaUtilities(){
+  try {
+    const inputBox = document.querySelector(".input-container");
+    inputBox.addEventListener("input", (event) => {
+      const pressedKey = event.data || event.inputType;
+      if (pressedKey === "*"){
+        event.target.value += "*";
+        const cursorPosition = event.target.value.length - 1;
+        event.target.setSelectionRange(cursorPosition, cursorPosition);
+      }else if (pressedKey === "deleteSoftLineBackward"){
+        event.target.value = "";
+      }
+      if (event.target.value.includes("\\m")){
+        event.target.value = event.target.value.replace("\\m", "Michael:");
+      }
+    });
+
+
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+
+
+//spice of life
+function checkTextContent(){
+  const allLoadedMessages = document.querySelectorAll(".message-bubble-content");
+  let regex = /\*(.*?)\*/g;
+  allLoadedMessages.forEach((element) => {
+    if (regex.test(element.innerHTML)){
+      element.innerHTML = element.innerHTML.replace(regex, '<i style="color:lightgray;">$1</i>');
+    }
+  });
+}
+
+function generateRandomString(length) {
+  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let result = '';
+
+  for (let i = 0; i < length; i++) {
+    const randomIndex = Math.floor(Math.random() * characters.length);
+    result += characters.charAt(randomIndex);
+  }
+
+  return result;
+}
+
+function getRandomInt(min, max) {
+  const minCeiled = Math.ceil(min);
+  const maxFloored = Math.floor(max);
+  return Math.floor(Math.random() * (maxFloored - minCeiled) + minCeiled); // The maximum is exclusive and the minimum is inclusive
+}
+
+function rotateArray(array, newElement) {
+  // Pop the last element
+  const poppedElement = array.pop();
+
+  // Push the new element to the beginning
+  array.unshift(newElement);
+
+  // Return the popped element (optional)
+  return poppedElement;
+}
+
+
+//check url and reload if needed
+let oldHref = document.location.href;
+window.onload = function() {
+    let bodyList = document.querySelector("body");
+    //listen to onload events in body
+    const observer = new MutationObserver(function(mutations) {
+        if (oldHref != document.location.href) {
+            oldHref = document.location.href;
+            console.info("changed location");
+            if (document.location.href == "https://www.unhinged.ai/"){
+              window.location.reload();
+                //main(); //dont
+            }else if(document.location.href.includes("https://www.unhinged.ai/chat")){
+              window.location.reload();
+            }
+        }
+    });
+
+    let config = {
+        childList: true,
+        subtree: true
+    };
+
+    observer.observe(bodyList, config);
+};
+
+function geturlQueryStringParams(url){
+  const urlSearchParams = new URLSearchParams(url);
+  const params = Object.fromEntries(urlSearchParams.entries());
+  return params;
+}
+
+// XMLHttpRequest interception
+const originalXmlOpen = XMLHttpRequest.prototype.open;
+const originalXmlSend = XMLHttpRequest.prototype.send;
+
+let currentPollingSID = null;
+let currentEIO = null;
+let currentTransportType = null;
+let currentTimestampDefault = null;
+
+XMLHttpRequest.prototype.open = function (method, url, async, user, password) {
+    console.log(`Intercepted XHR request: ${method} ${url}`);
+    const blockedKeywords = ["log", "updateUser", "posthog"]
+    if (blockedKeywords.some(keyword => url.includes(keyword))) {
+        console.info(`Request blocked for URL: ${url}`);
+        return; // Do not proceed with the request
+    }
+    const params = geturlQueryStringParams(url);
+    const value = params["https://api.unhinged.ai:443/socket.io/?EIO"];
+    delete params["https://api.unhinged.ai:443/socket.io/?EIO"];
+    params["EIO"] = value;
+    currentTimestampDefault = params.t;
+    currentTransportType = params.transport;
+    currentPollingSID = params.sid;
+    currentEIO = params.EIO;
+    console.log(currentEIO, currentPollingSID, currentTimestampDefault, currentTransportType);
+    // Call the original method
+    originalXmlOpen.call(this, method, url, async, user, password);
+};
+
+XMLHttpRequest.prototype.send = function (data) {
+    // Intercept the send method
+    console.log('Intercepted XHR send');
+    if (data) {
+        console.log("With Data:", data);
+    }
+    // Call the original method
+    originalXmlSend.call(this, data);
+};
+
+//to add, do array.pop(0), array.push
+function parseMessages(){
+  let messages = document.querySelectorAll(".message-bubble-content");
+  messages = Array.from(messages);
+  messages = messages.slice(messages.length - 19);
+  const mainArray = [];
+  messages.forEach((element) => {
+    element.innerHTML = element.innerHTML.replace(/<i[^>]*>(.*?)<\/i>/g, '*$1*');
+    const parent = element.parentElement;
+    const roleType = parent.className.includes("recipient") ? "assistant" : "user";
+    const elementData = {
+      role: roleType,
+      content: element.innerHTML.replace(/\n/g, " ") ,
+      id: crypto.randomUUID()
+    }
+    mainArray.push(elementData);
+  });
+  return mainArray;
+}
+
+
+function createMessage(message, timestamp, sid, eio, type, transport="polling"){
+  const currentMessages = parseMessages();
+  const newMessage = {role: "user", content: message,id:crypto.randomUUID()}
+  // currentMessages.pop(0);
+  currentMessages.push(newMessage);
+  // console.debug(currentMessages); for debugging
+  const baseUrl = `https://api.unhinged.ai/socket.io/?EIO=${eio}&transport=${transport}&t=${timestamp}&sid=${sid}`;
+  // Create payload
+  const data = {
+    isAnonymous: true,
+    userId: "649a236d481fae4fad64bf08",
+    characterId: __NEXT_DATA__.props.pageProps.conversation.character._id,
+    conversationId: __NEXT_DATA__.props.pageProps.conversation._id,
+    messages: currentMessages,
+    selectedModel: JSON.parse(localStorage.selectedModel).name
+  };
+  // Convert the JSON payload to a string
+  const jsonData = JSON.stringify(data);
+  //create main str
+  let mainString = `42["subscribe","normal_queue(${data.selectedModel})"]\u001e420["get_completion", ${jsonData}]`
+
+  if (type === "xhr"){
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", baseUrl, true);
+    xhr.setRequestHeader('Content-Type', 'text/plain;charset=UTF-8');
+    xhr.onload = function() {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        // Request was successful, handle the response
+        console.log('Response:', xhr.responseText);
+      } else {
+        // Request failed, handle the error
+        console.error('Request failed with status:', xhr.status);
+      }
+    };
+
+    xhr.onerror = function() {
+      console.error('Request failed');
+    };
+
+    //send request
+    xhr.send(mainString);
+  }else if(type === "fetch"){
+    fetch(baseUrl, {"headers": {
+      "Content-Type": "text/plain;charset=UTF-8",
+      "Accept": "*/*",
+    },
+      "method": "POST",
+      "mode": "cors",
+      "body": mainString,
+      "credentials": "omit"
+    })
+    .then((response) => {
+       if (!response.ok) {
+         if (response.status === 400){
+           console.error("ERROR WITH RES 400");
+           window.location.reload();
+         }
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+      return response.text(); // This returns a promise
+    })
+    .then((response) => {
+      console.log(response);
+    })
+    .catch((err) => {
+      console.error(err);
+    })
+  }
+}
+
+function createUserElement(message){
+  // Create the main container div
+  const mainContainer = document.createElement('div');
+  mainContainer.dataset.component = 'MessageBubble';
+  mainContainer.setAttribute('index', '18');
+  mainContainer.style.display = 'flex';
+  mainContainer.style.flexDirection = 'column';
+  mainContainer.style.gap = '4px';
+  mainContainer.style.justifyContent = 'flex-start';
+  mainContainer.style.alignItems = 'flex-start';
+  mainContainer.style.width = '100%';
+  mainContainer.style.opacity = '1.0';
+
+  // Create the first inner div
+  const firstInnerDiv = document.createElement('div');
+  firstInnerDiv.style.display = 'flex';
+  firstInnerDiv.style.flexDirection = 'row-reverse';
+  firstInnerDiv.style.gap = '10px';
+  firstInnerDiv.style.justifyContent = 'flex-start';
+  firstInnerDiv.style.alignItems = 'flex-start';
+  firstInnerDiv.style.width = '100%';
+
+  // Create the second inner div
+  const secondInnerDiv = document.createElement('div');
+  secondInnerDiv.style.display = 'flex';
+  secondInnerDiv.style.flexDirection = 'column';
+  secondInnerDiv.style.gap = '2px';
+  secondInnerDiv.style.justifyContent = 'flex-start';
+  secondInnerDiv.style.alignItems = 'flex-start';
+  secondInnerDiv.style.width = 'fit-content';
+  secondInnerDiv.style.position = 'relative';
+  secondInnerDiv.style.maxWidth = '90%';
+
+  // Create the content container div
+  const contentContainer = document.createElement('div');
+  contentContainer.classList.add('message-bubble-content-container', 'sender', 'clickable');
+  contentContainer.style.display = 'flex';
+  contentContainer.style.flexDirection = 'column';
+  contentContainer.style.gap = '8px';
+  contentContainer.style.justifyContent = 'flex-start';
+  contentContainer.style.alignItems = 'flex-start';
+  contentContainer.style.width = 'fit-content';
+  contentContainer.style.outline = '0px';
+  contentContainer.setAttribute('disabled', '');
+
+  // Create the content div
+  const contentDiv = document.createElement('div');
+  contentDiv.classList.add('message-bubble-content');
+  contentDiv.setAttribute('contenteditable', 'false');
+  contentDiv.innerHTML = message;
+  // Create the third inner div
+  const thirdInnerDiv = document.createElement('div');
+  thirdInnerDiv.style.display = 'flex';
+  thirdInnerDiv.style.flexDirection = 'row-reverse';
+  thirdInnerDiv.style.gap = '4px';
+  thirdInnerDiv.style.justifyContent = 'flex-start';
+  thirdInnerDiv.style.alignItems = 'center';
+  thirdInnerDiv.style.width = '100%';
+
+  // Create the author div
+  const authorDiv = document.createElement('div');
+  authorDiv.classList.add('message-bubble-author');
+  authorDiv.textContent = 'You';
+
+  // Append elements to their respective parents
+  contentContainer.appendChild(contentDiv);
+  secondInnerDiv.appendChild(contentContainer);
+  secondInnerDiv.appendChild(thirdInnerDiv);
+  thirdInnerDiv.appendChild(authorDiv);
+  firstInnerDiv.appendChild(secondInnerDiv);
+  mainContainer.appendChild(firstInnerDiv);
+
+  return mainContainer;
+}
+
+function createClickableDiv(){
+  // Create the main container div
+  const optionsMenuContainer = document.createElement('div');
+  optionsMenuContainer.classList.add('options-menu-container');
+  optionsMenuContainer.style.display = 'flex';
+  optionsMenuContainer.style.flexDirection = 'column';
+  optionsMenuContainer.style.gap = '0px';
+  optionsMenuContainer.style.justifyContent = 'flex-start';
+  optionsMenuContainer.style.alignItems = 'flex-start';
+  optionsMenuContainer.style.width = 'fit-content';
+
+  // Create the "Confirm Edit" button
+  const confirmEditButton = document.createElement('button');
+  confirmEditButton.classList.add('button', 'tertiary', 'clickable');
+  confirmEditButton.setAttribute('type', 'button');
+  confirmEditButton.setAttribute('name', 'Confirm Edit');
+  confirmEditButton.style.width = '100%';
+  confirmEditButton.style.justifyContent = 'space-between';
+  confirmEditButton.style.flexDirection = 'row-reverse';
+  confirmEditButton.style.height = 'fit-content';
+  confirmEditButton.style.borderRadius = '0px';
+  confirmEditButton.style.padding = '8px 12px';
+  confirmEditButton.style.fontSize = '15px';
+  confirmEditButton.style.fontWeight = '300';
+  confirmEditButton.style.color = 'rgb(63, 222, 165)';
+  confirmEditButton.innerHTML = `<svg viewBox="0 0 24 24" fill="none" style="width: 1.25em; height: 1.25em; flex-shrink: 0;"><path d="M9.57692 20L1.5 11.5216L3.75992 9.2344L9.53411 15.2128L20.1504 4L22.5 6.2448L9.57692 20Z" fill="#3FDEA5"></path></svg>Confirm Edit`;
+
+  // Create the horizontal divider
+  const divider = document.createElement('div');
+  divider.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+  divider.style.margin = '0px';
+  divider.style.height = '1px';
+  divider.style.minHeight = '1px';
+  divider.style.maxHeight = '1px';
+  divider.style.width = 'calc(100% + 0px)';
+  divider.style.boxSizing = 'border-box';
+
+  // Create the "Cancel Edit" button
+  const cancelEditButton = document.createElement('button');
+  cancelEditButton.classList.add('button', 'tertiary', 'clickable');
+  cancelEditButton.setAttribute('type', 'button');
+  cancelEditButton.setAttribute('name', 'Cancel Edit');
+  cancelEditButton.style.width = '100%';
+  cancelEditButton.style.justifyContent = 'space-between';
+  cancelEditButton.style.flexDirection = 'row-reverse';
+  cancelEditButton.style.height = 'fit-content';
+  cancelEditButton.style.borderRadius = '0px';
+  cancelEditButton.style.padding = '8px 12px';
+  cancelEditButton.style.fontSize = '15px';
+  cancelEditButton.style.fontWeight = '300';
+  cancelEditButton.style.color = 'rgb(220, 58, 115)';
+  cancelEditButton.innerHTML = `<svg viewBox="0 0 24 24" fill="none" style="width: 1.25em; height: 1.25em; flex-shrink: 0;"><path d="M21 18.6829L14.3032 11.9845L21 5.29664L18.6829 3L11.9885 9.69191L5.29909 3L3 5.29909L9.69764 12.0049L3 18.7009L5.29909 21L12.0106 14.2975L18.7034 21L21 18.6829Z" fill="#DC3A73"></path></svg>Cancel Edit`;
+
+  // Append elements to their respective parents
+  optionsMenuContainer.appendChild(confirmEditButton);
+  optionsMenuContainer.appendChild(divider);
+  optionsMenuContainer.appendChild(cancelEditButton);
+
+  const mainDiv = document.createElement("div");
+  mainDiv.style.cssText = 'display: flex; flex-direction: column; gap: 10px; justify-content: flex-start; align-items: flex-start; width: fit-content; align-self: flex-start; margin-left: 50px;';
+  mainDiv.appendChild(optionsMenuContainer);
+  cancelEditButton.addEventListener("click", () => {
+    const mainContent = mainDiv.parentElement.querySelector(".message-bubble-content");
+    mainContent.innerHTML = savedContent;
+    mainContent.setAttribute("contenteditable", "false");
+    mainContent.parentElement.style.outline = "";
+    mainDiv.remove();
+    editingActive = false;
+  });
+  confirmEditButton.addEventListener("click", () => {
+    const mainContent = mainDiv.parentElement.querySelector(".message-bubble-content");
+    mainContent.setAttribute("contenteditable", "false");
+    mainContent.parentElement.style.outline = "";
+    mainDiv.remove();
+    editingActive = false;
+  });
+  return mainDiv;
+}
+
+//fuction for creating the request based on text
+function createPOSTRequest(msg){
+  const generatedTimestamp = currentTimestampDefault ? currentTimestampDefault.substring(0,5) + generateRandomString(2): generateRandomString(7);
+  const generatedEIO = currentEIO ? currentEIO : getRandomInt(1, 10);
+  const generatedSID = currentPollingSID ? currentPollingSID : generateRandomString(20);
+  //usermessage stuffs
+  if (msg.trim() !== ""){
+    createMessage(msg, generatedTimestamp, generatedSID, generatedEIO, "fetch");
+    const mainElement = document.querySelector(".content-container");
+    mainElement.firstChild.insertBefore(createUserElement(msg), mainElement.firstChild.lastChild);
+    console.log(msg);
+  }
+}
+
+let firstTimeClickedHaymaker = false;
+let intervalId;
+function replaceSharedConversation(){
+  const mainbar = document.querySelector(".bottom-bar");
+  console.log(mainbar.children);
+  mainbar.removeChild(mainbar.firstChild);
+  const newDiv = document.createElement("div");
+  const newTextArea = document.createElement("textarea");
+  newTextArea.style.color = "#e0e0e0";
+  newTextArea.style.fontFamily = "inherit";
+  newTextArea.style.width = "100%";
+  newTextArea.className = "input-container";
+  newTextArea.style.fontSize = "1em";
+  newTextArea.placeholder = "Send a message..";
+  newDiv.style.height = "42px";
+  newTextArea.style.outline = "none";
+  newTextArea.style.fontWeight = "300";
+  newTextArea.style.height = "42px";
+  newDiv.className = "input-wrapper";
+  newDiv.style.width = "100%";
+  newDiv.appendChild(newTextArea);
+  mainbar.appendChild(newDiv);
+  //add a new feature to input how many times we should send the fetch request
+  const newInputNumberElement = document.createElement("input");
+  newInputNumberElement.type = "number";
+  newInputNumberElement.min = 1;
+  newInputNumberElement.max = 50;
+  newInputNumberElement.id = "fetch-qty";
+  mainbar.appendChild(newInputNumberElement);
+  //OVERLOAD 90000000000 feature
+  const overLoadButton = document.createElement("button");
+  overLoadButton.textContent = "OVERLOAD!!";
+  overLoadButton.classList.add('button', 'tertiary', 'clickable');
+  overLoadButton.setAttribute('type', 'button');
+  overLoadButton.setAttribute('name', 'Cancel Edit');
+  overLoadButton.style.width = '100%';
+  overLoadButton.style.justifyContent = 'space-between';
+  overLoadButton.style.flexDirection = 'row-reverse';
+  overLoadButton.style.height = 'fit-content';
+  overLoadButton.style.borderRadius = '0px';
+  overLoadButton.style.padding = '8px 12px';
+  overLoadButton.style.fontSize = '15px';
+  overLoadButton.style.fontWeight = '300';
+  overLoadButton.style.color = 'rgb(220, 58, 115)';
+  mainbar.appendChild(overLoadButton);
+  overLoadButton.addEventListener("click", () => {
+    if (!firstTimeClickedHaymaker){
+      console.log("start the haymaker!");
+      //it begins
+      const intervalTime = 2000;
+      intervalId = setInterval(() => {
+        createPOSTRequest(newTextArea.value);
+        console.log("new request created....");
+      }, intervalTime);
+      firstTimeClickedHaymaker = true;
+    }else{
+      console.warn("ABORTING HAYMAKER!");
+      clearInterval(intervalId);
+      firstTimeClickedHaymaker = false;
+    }
+  });
+  //functionality
+  newTextArea.addEventListener("keydown", (event) => {
+    if (event.key === "Enter"){
+      event.preventDefault();
+      const newInputNumberElement = document.querySelector('input[type="number"]');
+      const numberOfRequests = parseInt(newInputNumberElement.value, 10);
+      const userMessage = event.target.value;
+      for (let index = 0; index < numberOfRequests; index++) {
+        createPOSTRequest(userMessage);
+      }
+      event.target.value = "";
+    }
+  });
+}
+
+
+const getTextBox = document.createElement("button");
+getTextBox.textContent = "New Text";
+getTextBox.addEventListener("click", replaceSharedConversation);
+getTextBox.style.background = 'linear-gradient(90deg,#ff26a7,#ff2759)';
+getTextBox.style.boxShadow = '0 4px 4px -2px rgba(0,0,0,.33)';
+getTextBox.style.padding = "5px";
+getTextBox.style.border = "none";
+getTextBox.style.borderRadius = "4px";
+
+function startCode(){
+  let parentElementMain = document.querySelector(".navbar-background");
+  parentElementMain.insertBefore(button,parentElementMain.lastChild);
+  parentElementMain.insertBefore(getTextBox, parentElementMain.lastChild);
+
+  if (window.location.href.includes("https://www.unhinged.ai/chat")){
+    checkTextContent();
+    addEditingFeatures();
+    const mutationCallback = (mutationList) => {
+      for (const mutation of mutationList) {
+        if (mutation.type === "childList") {
+          checkTextContent();
+          addEditingFeatures();
+        }
+      }
+    };
+    let config = {
+            childList: true,
+            subtree: true
+        };
+    const observer = new MutationObserver(mutationCallback);
+    const desiredDiv = document.querySelector(".content-container").firstChild;
+    observer.observe(desiredDiv, config);
+    const bottomBarChild = document.querySelector(".bottom-bar").firstChild;
+    if (bottomBarChild.textContent.includes("This conversation has been shared with you.")){
+      replaceSharedConversation();
+      textAreaUtilities();
+    }else{
+      textAreaUtilities();
+    }
+  }
+}
+
+
+document.body.onload = function(){
+  setTimeout(() => {
+    startCode();
+  }, 500);
+}
+
+
+
+
